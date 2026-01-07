@@ -3,9 +3,9 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from proposals.models import UnifiedProposal, ProposalType, ProposalState, ApprovalRecord
-from docops.writer import DocWriter
-from state.manager import StateManager
+from app.proposals.models import UnifiedProposal, ProposalType, ProposalState, ApprovalRecord
+from app.docops.writer import DocWriter
+from app.state.manager import StateManager
 
 # Configuration (should be from .env in future)
 WORKSPACE_ROOT = "/Volumes/NVME/Source/prototype_agent_vibecode"
@@ -175,75 +175,28 @@ def handle_approval(decision, note=""):
     return status_text
 
 def apply_current_proposal():
+    from runtime.execution_engine import execute_patch_proposal
     state = state_manager.get_state()
     proposal = state.get("current_proposal")
-    if not proposal or proposal["state"] != ProposalState.APPROVED:
-        return "Proposal must be approved first."
+    if not proposal: return "No proposal."
     
     try:
-        state_manager.update_proposal_state(ProposalState.EXECUTING)
-        
-        if proposal["proposal_type"] == ProposalType.DOC:
-            # Re-parse to use the docops protocol logic
-            from docops.protocol import parse_docops, expand_action
-            doc_proposal = parse_docops(json.dumps(proposal["payload"]))
-            expanded_actions = [expand_action(a) for a in doc_proposal.actions]
-            reports = writer.execute_bundle(expanded_actions)
-            state_manager.record_doc_write(proposal["proposal_id"])
-            return f"Completed: {len(reports)} doc actions applied."
-        else:
-            # PatchOps execution
-            from proposals.patchops import PatchOpsProposal
-            from patchops.engine import PatchEngine
-            
-            patch_engine = PatchEngine(WORKSPACE_ROOT)
-            p_patch = PatchOpsProposal(**proposal["payload"])
-            results = patch_engine.apply_proposal(p_patch)
-            
-            # Transition to Executing -> Awaiting_Verification (implicit in Completed for now if no verification needed, but Phase 5 requires loop)
-            # We'll stick to the Phase 5 spec: after apply, user must verify.
-            state_manager.update_proposal_state("Awaiting_Verification")
-            
-            log_content = f"# Patch Apply Report\nProposal: {proposal['proposal_id']}\n\n"
-            for r in results:
-                log_content += f"- {r['operation']} {r['path']}: {r['status']}\n"
-            
-            log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_patch_{proposal['proposal_id']}.md"
-            with open(log_path, "w") as f:
-                f.write(log_content)
-                
-            return f"Applied {len(results)} changes. Please verify and paste test output in the Verification tab."
-            
+        report = execute_patch_proposal(WORKSPACE_ROOT, proposal["proposal_id"], "ui_session")
+        return f"Execution report: {report['status']}. {report.get('results', [])}"
     except Exception as e:
-        state_manager.update_proposal_state(ProposalState.FAILED)
-        return f"Failed: {str(e)}"
+        return f"Error: {str(e)}"
 
 def handle_verification(output, result):
+    from runtime.verification import record_verification
     state = state_manager.get_state()
     proposal = state.get("current_proposal")
-    if not proposal or proposal["state"] != "Awaiting_Verification":
-        return "No proposal awaiting verification."
+    if not proposal: return "No proposal."
     
-    state_manager.record_verification(proposal["proposal_id"], output, result)
-    
-    # If Failed, log it and prepare for repair
-    if result == "FAIL":
-        # Simplified repair log entry
-        log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_verification_{proposal['proposal_id']}_fail.md"
-        with open(log_path, "w") as f:
-            f.write(f"# Verification FAILED\nProposal: {proposal['proposal_id']}\n\n## Output\n```\n{output}\n```")
-        
-        # GENERATE REPAIR
-        from orchestration.repair_lane import RepairLane
-        repair_lane = RepairLane(WORKSPACE_ROOT)
-        repair_proposal = repair_lane.generate_repair(proposal["proposal_id"], output)
-        
-        # Switch current proposal to repair
-        handle_proposal_submission(json.dumps(repair_proposal.model_dump()))
-        
-        return f"Verification marked FAIL. AUTOMATED REPAIR GENERATED: {repair_proposal.proposal_id}."
-    
-    return f"Verification marked PASS. Proposal {proposal['proposal_id']} completed."
+    try:
+        res = record_verification(WORKSPACE_ROOT, proposal["proposal_id"], "ui_session", result == "PASS", output)
+        return f"Verification recorded: {res['status']}"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 def scan_for_recovery():
     """Scans the workspace for leftover .tmp, .bak, or .del files from failed transactions."""
@@ -318,65 +271,68 @@ def load_document(rel_path):
             return f.read()
     return "File not found."
 
-with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
+with gr.Blocks(title="Agent IDE - Phase 9 Hardened UI") as demo:
     gr.Markdown("# Agent IDE - Unified Approval Center")
     
     with gr.Row():
-        # Left Column: Navigator
+        # Panel 1: Documents Workspace
         with gr.Column(scale=1):
-            gr.Markdown("### Navigator")
+            gr.Markdown("### 🗄️ Documents Workspace")
             filter_dropdown = gr.Dropdown(choices=["All", "Outline", "Phases", "ADRs", "Run Logs", "Archive"], value="All", label="Filter")
             doc_list = gr.Dropdown(choices=get_documents_list(), label="Documents")
             refresh_btn = gr.Button("Refresh")
             bootstrap_btn = gr.Button("🚀 Bootstrap Workspace", variant="secondary")
+            scaffold_btn = gr.Button("🚀 Create Acceptance Scaffold", variant="secondary")
+            
+            # Integrated Preview
+            preview_box = gr.Markdown("Select a document to preview.")
         
-        # Center Column: Chat & Approval
+        # Panel 2: Approval & Intent (Runtime Console part A)
         with gr.Column(scale=2):
-            gr.Markdown("### Approval Center")
+            gr.Markdown("### ⚖️ Approval & Intent")
             
             with gr.Accordion("🚨 Recovery Required!", open=True, visible=False) as recovery_alert:
-                gr.Markdown("Leftover transaction files detected (.tmp, .bak, .del). Please clean up or investigate.")
+                gr.Markdown("Leftover transaction files detected (.tmp, .bak, .del).")
                 recovery_list = gr.Textbox(label="Orphaned Files", lines=3, interactive=False)
                 cleanup_btn = gr.Button("🗑️ Clean Up Artifacts", variant="stop")
 
-            proposal_status = gr.Markdown("Status: Loading...")
+            proposal_status = gr.Markdown("Status: Idle")
+            proposal_payload_view = gr.JSON(label="Active Proposal Artifact (JSON)")
             
             with gr.Row():
                 approve_btn = gr.Button("✅ Approve", variant="primary")
                 reject_btn = gr.Button("❌ Reject", variant="stop")
             
-            note_input = gr.Textbox(label="Approval/Rejection Note", placeholder="Reason for decision...")
+            note_input = gr.Textbox(label="Decision Note", placeholder="Reason for decision...")
             execute_btn = gr.Button("⚡ Execute Action", variant="primary")
 
             with gr.Accordion("Debug: Manual Proposal Entry", open=False):
-                proposal_input = gr.Code(label="Proposal JSON", language="json")
+                proposal_input = gr.Code(label="Proposal JSON (Draft)", language="json")
                 submit_proposal_btn = gr.Button("Submit Proposal")
 
-        # Right Column: Preview
+        # Panel 3: Diff Viewer & Verification
         with gr.Column(scale=2):
+            gr.Markdown("### 🔍 Diff Viewer & Verification")
             with gr.Tabs():
-                with gr.TabItem("Doc Preview"):
-                    preview_box = gr.Markdown("Select a document to preview.")
-                with gr.TabItem("Proposal Payload"):
-                    proposal_payload_view = gr.JSON(label="Payload")
-                with gr.TabItem("Diff Viewer"):
+                with gr.TabItem("Diff View"):
                     diff_view = gr.Markdown("No active patch proposal.")
                 with gr.TabItem("Verification"):
-                    gr.Markdown("### Verification Loop")
-                    verif_output = gr.Textbox(label="Test/Lint Output", placeholder="Paste output here...", lines=5)
+                    verif_output = gr.Textbox(label="Test/Lint Output Artifact", placeholder="Paste output here...", lines=10)
                     with gr.Row():
                         pass_btn = gr.Button("✅ PASS", variant="primary")
                         fail_btn = gr.Button("❌ FAIL", variant="stop")
                     verif_status = gr.Markdown("Status: Pending")
-                with gr.TabItem("Runtime Hist"):
-                    gr.Markdown("### Runtime History")
-                    checkpoint_view = gr.JSON(label="Last Checkpoint")
-                    event_log = gr.Code(label="Event Log", language="markdown", interactive=False)
-                    refresh_hist_btn = gr.Button("Refresh History")
+
+        # Panel 4: Runtime Console (Part B: History)
+        with gr.Column(scale=1):
+            gr.Markdown("### 📜 Runtime Console")
+            checkpoint_view = gr.JSON(label="Last Checkpoint State")
+            event_log = gr.Code(label="Event Log", language="markdown", interactive=False)
+            refresh_hist_btn = gr.Button("Refresh History")
 
     # Event Handlers
-    from orchestration.runtime import GraphRuntime
-    from proposals.artifacts import ProposalArtifactManager
+    from app.orchestration.runtime import GraphRuntime
+    from app.proposals.artifacts import ProposalArtifactManager
     runtime = GraphRuntime(WORKSPACE_ROOT)
     artifact_manager = ProposalArtifactManager(WORKSPACE_ROOT)
 
@@ -427,6 +383,9 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
     
     execute_btn.click(apply_current_proposal, outputs=[proposal_status])
     bootstrap_btn.click(bootstrap_workspace, outputs=[proposal_status])
+    
+    from app.tools.scaffold_phase07 import scaffold_phase07_workspace
+    scaffold_btn.click(lambda: f"Scaffold result: {scaffold_phase07_workspace(WORKSPACE_ROOT)}", outputs=[proposal_status])
 
     pass_btn.click(lambda o: handle_verification(o, "PASS"), inputs=[verif_output], outputs=[verif_status])
     fail_btn.click(lambda o: handle_verification(o, "FAIL"), inputs=[verif_output], outputs=[verif_status])

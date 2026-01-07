@@ -1,5 +1,5 @@
 from typing import List
-from proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
+from app.proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
 
 class RepairLane:
     def __init__(self, workspace_root: str):

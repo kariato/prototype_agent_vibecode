@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
 from .graph import build_ide_graph, IDEState
-from state.manager import StateManager
+from app.state.manager import StateManager
 
 class GraphRuntime:
     def __init__(self, workspace_root: str):

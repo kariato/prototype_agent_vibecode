@@ -15,6 +15,7 @@ class StateManager:
 
     def _save_state(self, state: dict):
         state["updated_at"] = datetime.now().timestamp()
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.state_path, "w") as f:
             json.dump(state, f, indent=4)
 

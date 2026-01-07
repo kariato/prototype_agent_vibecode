@@ -1,51 +1,37 @@
-# Phase 07 — Hello World Walkthrough (Python + pytest)
+# Walkthrough — Hello World (Acceptance Proof)
 
-**Phase ID:** 07
-**Status:** Completed
+**Phase ID:** 07 (Formalized)
+**Status:** Canonical Proof
 **Last Updated:** 2026-01-06
 
----
+## 1. Setup
+1.  Initialize Workspace: Click **🚀 Bootstrap Workspace**.
+2.  Add Scaffold: Click **🚀 Create Acceptance Scaffold**.
+    - Expected: `adder.py` and `tests/test_adder.py` are created.
 
-## 1) Objective
+## 2. DocOps Proof (Gate A)
+1.  Submit Intent: Paste `@docs phase create 10 Acceptance Proof` in the Manual Proposal Entry.
+2.  Status: "Awaiting Approval".
+3.  Action: Click **✅ Approve** and then **⚡ Execute Action**.
+    - Expected: Document created in `documents/PHASES/`. Check **Navigator**.
 
-Exercise the full system loop: **DocOps → Approval → PatchOps → Diff Review → Approval → Apply → Verify (FAIL) → Repair → Approval → Apply → Verify (PASS) → Close**.
+## 3. PatchOps Proof (Gate B)
+1.  Submit Intent: Create a PatchOps proposal that makes `add(a, b)` return `a + b + 1` (deliberate bug).
+2.  Status: "Awaiting Approval".
+3.  Inspect: Check **Diff Viewer** for the exact incorrect change.
+4.  Action: Click **✅ Approve** and then **⚡ Execute Action**.
+    - Expected: `adder.py` is updated.
 
----
+## 4. Verification & Repair
+1.  Verify: Run `pytest tests/test_adder.py` (externally).
+2.  Action: Paste the failing output into the **Verification** tab and click **❌ FAIL**.
+    - Expected: System generates a **Repair Proposal** and switches to it.
+3.  Action: Click **✅ Approve** (Repair) and **⚡ Execute Action**.
+4.  Verify: Run `pytest` again. Paste PASS output and click **✅ PASS**.
+    - Expected: Phase is closed. Audit log updated.
 
-## 2) Walkthrough Steps
-
-### Step 1: Bootstrap
-- [ ] Click "🚀 Bootstrap Workspace"
-- [ ] Verify `documents/` and `.agent_ide/` are created.
-
-### Step 2: Phase Plan
-- [ ] In "Proposal JSON", type `@docs:phase create 07 hello-world-walkthrough` and click Submit.
-- [ ] Verify a DocOps proposal is created for the Phase 07 doc.
-- [ ] Approve and Execute.
-
-### Step 3: Initial Patch (Intentional Fail)
-- [ ] Submit a PatchOps proposal for:
-  - `adder.py`: `def add(a,b): return a + b`
-  - `tests/test_adder.py`: `def test_add(): from adder import add; assert add(2,2) == 5`
-- [ ] Review Diff (ensure line `+ assert add(2,2) == 5` is visible).
-- [ ] Approve and Execute.
-
-### Step 4: Verification (FAIL)
-- [ ] Run `pytest` manually.
-- [ ] Paste `AssertionError: assert 4 == 5` into the Verification tab.
-- [ ] Click **❌ FAIL**.
-- [ ] Verify that a **Repair Proposal** is automatically generated in the Approval Center.
-
-### Step 5: Repair & PASS
-- [ ] Review Repair Diff (should fix `5` to `4`).
-- [ ] Approve and Execute.
-- [ ] Run `pytest` and paste passing output.
-- [ ] Click **✅ PASS**.
-- [ ] Confirm phase completion in logs.
-
----
-
-## 3) Expected Outcomes
-- Full audit history in `documents/RUN_LOGS/`.
-- Proposal and execution artifacts in `.agent_ide/artifacts/`.
-- State correctly tracked in `project_state.json`.
+## 5. Recovery Proof
+1.  Induce: Manually create a file `.adder.py.bak.999` in the root.
+2.  Refresh: Click **Refresh History**.
+    - Expected: **🚨 Recovery Required!** alert appears.
+3.  Action: Click **🗑️ Clean Up Artifacts**.

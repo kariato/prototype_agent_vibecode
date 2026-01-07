@@ -4,8 +4,8 @@ import random
 import string
 from pathlib import Path
 from typing import List, Dict, Optional
-from proposals.patchops import PatchOpsProposal, PatchActionType
-from utils.hashing import calculate_file_hash, calculate_content_hash
+from app.proposals.patchops import PatchOpsProposal, PatchActionType
+from app.utils.hashing import calculate_file_hash, calculate_content_hash
 
 class PatchEngine:
     def __init__(self, workspace_root: str):
