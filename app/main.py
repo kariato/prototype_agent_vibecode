@@ -290,18 +290,53 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
                         pass_btn = gr.Button("✅ PASS", variant="primary")
                         fail_btn = gr.Button("❌ FAIL", variant="stop")
                     verif_status = gr.Markdown("Status: Pending")
+                with gr.TabItem("Runtime Hist"):
+                    gr.Markdown("### Runtime History")
+                    checkpoint_view = gr.JSON(label="Last Checkpoint")
+                    event_log = gr.Code(label="Event Log", language="text", interactive=False)
+                    refresh_hist_btn = gr.Button("Refresh History")
 
     # Event Handlers
+    from orchestration.runtime import GraphRuntime
+    from proposals.artifacts import ProposalArtifactManager
+    runtime = GraphRuntime(WORKSPACE_ROOT)
+    artifact_manager = ProposalArtifactManager(WORKSPACE_ROOT)
+
+    def refresh_runtime_hist():
+        state = state_manager.get_state()
+        runtime_info = state.get("runtime", {})
+        events = state.get("events", [])
+        log_text = "\n".join([f"[{datetime.fromtimestamp(e['timestamp']).strftime('%H:%M:%S')}] {e['type']}" for e in events])
+        return runtime_info, log_text
+
     demo.load(lambda: get_current_state()[1], outputs=[proposal_status])
     refresh_btn.click(lambda f: gr.update(choices=get_documents_list(f)), inputs=[filter_dropdown], outputs=[doc_list])
     doc_list.select(load_document, inputs=[doc_list], outputs=[preview_box])
-    
-    def on_submit(proposal_json):
-        status, payload = handle_proposal_submission(proposal_json)
-        diff_content = payload.get("diff_content", "No diff for this proposal.") if payload else ""
-        return status, payload, f"```diff\n{diff_content}\n```"
+    refresh_hist_btn.click(refresh_runtime_hist, outputs=[checkpoint_view, event_log])
 
-    submit_proposal_btn.click(on_submit, inputs=[proposal_input], outputs=[proposal_status, proposal_payload_view, diff_view])
+    def on_submit(proposal_json):
+        # 1. Standard validation
+        status, payload = handle_proposal_submission(proposal_json)
+        if "Error" in status:
+            return status, None, "Error", None
+        
+        # 2. Save artifact
+        proposal_id = payload.get("proposal_id", "manual")
+        artifact_path = artifact_manager.save_proposal(proposal_id, payload)
+        
+        # 3. Update project state with the artifact pointer
+        p_state = state_manager.get_state()
+        p_state.setdefault("runtime", {})["pending_proposal_path"] = str(artifact_path)
+        
+        # 4. Log event
+        event = runtime.emit_event("PROPOSAL_CREATED", {"proposal_id": proposal_id, "path": str(artifact_path)})
+        p_state.setdefault("events", []).append(event)
+        state_manager._save_state(p_state)
+
+        diff_content = payload.get("diff_content", "No diff for this proposal.") if payload else ""
+        return status, payload, f"```diff\n{diff_content}\n```", refresh_runtime_hist()[1]
+
+    submit_proposal_btn.click(on_submit, inputs=[proposal_input], outputs=[proposal_status, proposal_payload_view, diff_view, event_log])
     
     approve_btn.click(lambda n: handle_approval("Approved", n), inputs=[note_input], outputs=[proposal_status])
     reject_btn.click(lambda n: handle_approval("Rejected", n), inputs=[note_input], outputs=[proposal_status])
