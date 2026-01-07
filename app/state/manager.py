@@ -34,6 +34,13 @@ class StateManager:
         state["current_proposal"] = proposal_dict
         self._save_state(state)
 
+    def get_proposal(self, proposal_id: str) -> dict:
+        state = self._load_state()
+        curr = state.get("current_proposal")
+        if curr and curr.get("proposal_id") == proposal_id:
+            return curr
+        return None
+
     def update_proposal_state(self, state_str: str, validation_messages: list = None):
         state = self._load_state()
         if "current_proposal" in state:
@@ -55,10 +62,12 @@ class StateManager:
         state.setdefault("phases", {}).setdefault("phase_status", {})[phase_id] = status
         self._save_state(state)
 
-    def record_doc_write(self, proposal_id: str):
+    def record_doc_write(self, proposal_id: str, files_written: list = None):
         state = self._load_state()
         state.setdefault("documents", {})["last_write_at"] = datetime.now().timestamp()
         state["documents"]["last_write_proposal_id"] = proposal_id
+        if files_written:
+            state["documents"]["last_files_written"] = files_written
         if "current_proposal" in state and state["current_proposal"]["proposal_id"] == proposal_id:
             state["current_proposal"]["state"] = "Completed"
         self._save_state(state)

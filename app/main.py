@@ -8,6 +8,7 @@ from app.docops.writer import DocWriter
 from app.state.manager import StateManager
 
 from app.config.settings import get_settings
+from app.runtime.docops import validate_docops_payload, execute_docops
 
 # Load configuration
 settings = get_settings()
@@ -69,7 +70,9 @@ def handle_proposal_submission(proposal_json):
         
         if p_type == ProposalType.DOC:
             proposal.targets = [a.get("path", "unknown") for a in data.get("actions", [])]
-            # DocOps validation (already mostly handled by pydantic if we used it here)
+            ok, errors = validate_docops_payload(data, WORKSPACE_ROOT)
+            if not ok:
+                validation_errors.extend(errors)
         else:
             # PatchOps Validation
             from app.proposals.patchops import PatchOpsProposal, PatchActionType
@@ -184,8 +187,15 @@ def apply_current_proposal():
     if not proposal: return "No proposal."
     
     try:
-        report = execute_patch_proposal(WORKSPACE_ROOT, proposal["proposal_id"], "ui_session")
-        return f"Execution report: {report['status']}. {report.get('results', [])}"
+        if proposal["proposal_type"] == ProposalType.DOC:
+            report = execute_docops(WORKSPACE_ROOT, proposal["proposal_id"], "ui_session")
+            if report["success"]:
+                return f"DocOps executed: {report['files_written']}. Archived: {report['files_archived']}"
+            else:
+                return f"DocOps failed: {report['errors']}"
+        else:
+            report = execute_patch_proposal(WORKSPACE_ROOT, proposal["proposal_id"], "ui_session")
+            return f"Execution report: {report['status']}. {report.get('results', [])}"
     except Exception as e:
         return f"Error: {str(e)}"
 
