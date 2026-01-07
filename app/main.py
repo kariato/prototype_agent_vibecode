@@ -1,7 +1,11 @@
 import gradio as gr
+import json
 import os
+from datetime import datetime
 from pathlib import Path
 from proposals.models import UnifiedProposal, ProposalType, ProposalState, ApprovalRecord
+from docops.writer import DocWriter
+from state.manager import StateManager
 
 # Configuration (should be from .env in future)
 WORKSPACE_ROOT = "/Volumes/NVME/Source/prototype_agent_vibecode"
@@ -24,6 +28,24 @@ def get_current_state():
 
 def handle_proposal_submission(proposal_json):
     try:
+        # Handle @docs command
+        if proposal_json.startswith("@docs"):
+            cmd = proposal_json.replace("@docs:", "@docs ").strip()
+            parts = cmd.split(" ")
+            if len(parts) >= 4 and parts[1] == "phase" and parts[2] == "create":
+                phase_num = parts[3]
+                title = " ".join(parts[4:]) if len(parts) > 4 else "Unknown"
+                proposal_data = {
+                    "proposal_id": f"doc_phase_{phase_num}",
+                    "phase_id": phase_num,
+                    "summary": f"Create phase {phase_num} doc: {title}",
+                    "actions": [
+                        {"type": "CreateDoc", "path": f"documents/PHASES/phase_{phase_num}_{title.replace(' ', '_').lower()}.md", "content": f"# Phase {phase_num} - {title}\nPlaceholder content."},
+                        {"type": "AppendLog", "path": f"documents/RUN_LOGS/run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_phase{phase_num}.md", "content": f"Started phase {phase_num}"}
+                    ]
+                }
+                proposal_json = json.dumps(proposal_data)
+
         data = json.loads(proposal_json)
         
         # Determine type
@@ -204,15 +226,45 @@ def handle_verification(output, result):
     
     state_manager.record_verification(proposal["proposal_id"], output, result)
     
-    # If Failed, log it and prepare for repair (Phase 05 Repair Lane)
+    # If Failed, log it and prepare for repair
     if result == "FAIL":
         # Simplified repair log entry
         log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_verification_{proposal['proposal_id']}_fail.md"
         with open(log_path, "w") as f:
             f.write(f"# Verification FAILED\nProposal: {proposal['proposal_id']}\n\n## Output\n```\n{output}\n```")
-        return f"Verification marked FAIL. Repair proposal needed (referencing {proposal['proposal_id']})."
+        
+        # GENERATE REPAIR
+        from orchestration.repair_lane import RepairLane
+        repair_lane = RepairLane(WORKSPACE_ROOT)
+        repair_proposal = repair_lane.generate_repair(proposal["proposal_id"], output)
+        
+        # Switch current proposal to repair
+        handle_proposal_submission(json.dumps(repair_proposal.model_dump()))
+        
+        return f"Verification marked FAIL. AUTOMATED REPAIR GENERATED: {repair_proposal.proposal_id}."
     
     return f"Verification marked PASS. Proposal {proposal['proposal_id']} completed."
+
+def bootstrap_workspace():
+    try:
+        # Directories
+        dirs = ["documents/PHASES", "documents/DECISIONS", "documents/RUN_LOGS", "documents/_archive", ".agent_ide"]
+        for d in dirs:
+            (Path(WORKSPACE_ROOT) / d).mkdir(parents=True, exist_ok=True)
+        
+        # Initial State
+        state = state_manager.get_state()
+        state["workspace"] = {"root_path": WORKSPACE_ROOT, "status": "initialized"}
+        state_manager._save_state(state)
+        
+        # Initial Log
+        log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_phase01_bootstrap.md"
+        with open(log_path, "w") as f:
+            f.write("# Phase 01: Bootstrap\nWorkspace initialized successfully.")
+            
+        return "Workspace bootstrapped successfully."
+    except Exception as e:
+        return f"Bootstrap failed: {str(e)}"
 
 def get_documents_list(filter_type="All"):
     doc_dir = Path(WORKSPACE_ROOT) / "documents"
@@ -255,8 +307,9 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
         with gr.Column(scale=1):
             gr.Markdown("### Navigator")
             filter_dropdown = gr.Dropdown(choices=["All", "Outline", "Phases", "ADRs", "Run Logs", "Archive"], value="All", label="Filter")
-            doc_list = gr.Listbox(choices=get_documents_list(), label="Documents")
+            doc_list = gr.Dropdown(choices=get_documents_list(), label="Documents")
             refresh_btn = gr.Button("Refresh")
+            bootstrap_btn = gr.Button("🚀 Bootstrap Workspace", variant="secondary")
         
         # Center Column: Chat & Approval
         with gr.Column(scale=2):
@@ -293,7 +346,7 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
                 with gr.TabItem("Runtime Hist"):
                     gr.Markdown("### Runtime History")
                     checkpoint_view = gr.JSON(label="Last Checkpoint")
-                    event_log = gr.Code(label="Event Log", language="text", interactive=False)
+                    event_log = gr.Code(label="Event Log", language="markdown", interactive=False)
                     refresh_hist_btn = gr.Button("Refresh History")
 
     # Event Handlers
@@ -342,6 +395,7 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
     reject_btn.click(lambda n: handle_approval("Rejected", n), inputs=[note_input], outputs=[proposal_status])
     
     execute_btn.click(apply_current_proposal, outputs=[proposal_status])
+    bootstrap_btn.click(bootstrap_workspace, outputs=[proposal_status])
 
     pass_btn.click(lambda o: handle_verification(o, "PASS"), inputs=[verif_output], outputs=[verif_status])
     fail_btn.click(lambda o: handle_verification(o, "FAIL"), inputs=[verif_output], outputs=[verif_status])

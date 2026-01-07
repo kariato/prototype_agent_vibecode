@@ -9,7 +9,7 @@ class StateManager:
 
     def _load_state(self) -> dict:
         if not self.state_path.exists():
-            raise FileNotFoundError(f"Project state file not found: {self.state_path}")
+            return {"schema_version": 1}
         with open(self.state_path, "r") as f:
             return json.load(f)
 
