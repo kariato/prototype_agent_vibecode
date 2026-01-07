@@ -61,12 +61,15 @@ class GraphRuntime:
         with open(artifact_path, "r") as f:
             return json.load(f)
 
-    def emit_event(self, event_type: str, payload: dict):
+    def emit_event(self, event_type: str, payload: dict, impact: str = "info", node_name: str = None):
         """
         Returns a structured event for the UI.
         """
-        return {
-            "timestamp": datetime.now().timestamp(),
-            "type": event_type,
-            "payload": payload
-        }
+        from app.runtime.events import create_event, EventImpact
+        return create_event(
+            event_type=event_type,
+            session_id="default_session", # In a real system, this would be per-run
+            impact=EventImpact(impact),
+            node_name=node_name or payload.get("node_name"),
+            payload=payload
+        )

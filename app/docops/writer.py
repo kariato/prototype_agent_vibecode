@@ -1,6 +1,6 @@
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from .protocol import DocOpsAction, ActionType
 
@@ -19,7 +19,7 @@ class DocWriter:
         if not source_path.exists():
             return
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         archive_dir = self.workspace_root / "documents" / "_archive" / timestamp
         archive_path = archive_dir / relative_path
         

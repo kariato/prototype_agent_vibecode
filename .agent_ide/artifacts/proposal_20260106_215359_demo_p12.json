@@ -1,0 +1,13 @@
+{
+    "proposal_id": "demo_p12",
+    "phase_id": "12",
+    "summary": "UI Demo",
+    "files": [],
+    "actions": [
+        {
+            "type": "AppendLog",
+            "path": "documents/RUN_LOGS/demo.md",
+            "content": "demo content"
+        }
+    ]
+}

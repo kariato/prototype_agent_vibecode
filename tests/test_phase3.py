@@ -1,31 +1,20 @@
-import sys
-import os
 import unittest
 import json
+import shutil
 from pathlib import Path
-from datetime import datetime
 
-# Add app to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
-
-from proposals.models import UnifiedProposal, ProposalType, ProposalState, ApprovalRecord
-from state.manager import StateManager
-from docops.writer import DocWriter
+from app.proposals.models import UnifiedProposal, ProposalType, ProposalState, ApprovalRecord
+from app.state.manager import StateManager
+from app.docops.writer import DocWriter
 
 class TestPhase3(unittest.TestCase):
     def setUp(self):
         self.workspace = Path("/tmp/agent_ide_test_phase3")
         if self.workspace.exists():
-            import shutil
             shutil.rmtree(self.workspace)
         self.workspace.mkdir(parents=True)
         (self.workspace / "documents").mkdir()
-        (self.workspace / ".agent_ide").mkdir()
         
-        self.state_path = self.workspace / ".agent_ide" / "project_state.json"
-        with open(self.state_path, "w") as f:
-            json.dump({"schema_version": 1}, f)
-
         self.manager = StateManager(str(self.workspace))
         self.writer = DocWriter(str(self.workspace))
 
@@ -43,7 +32,7 @@ class TestPhase3(unittest.TestCase):
             targets=["documents/hello.md"],
             payload=payload
         )
-        self.manager.submit_proposal(proposal.dict())
+        self.manager.submit_proposal(proposal.model_dump())
         
         state = self.manager.get_state()
         self.assertEqual(state["current_proposal"]["state"], ProposalState.PROPOSAL_CREATED)
@@ -60,7 +49,7 @@ class TestPhase3(unittest.TestCase):
             gate="A",
             decision="Approved"
         )
-        self.manager.record_approval(approval.dict())
+        self.manager.record_approval(approval.model_dump())
         state = self.manager.get_state()
         self.assertEqual(state["current_proposal"]["state"], ProposalState.APPROVED)
 
@@ -79,7 +68,7 @@ class TestPhase3(unittest.TestCase):
             targets=["app/main.py"],
             payload={}
         )
-        self.manager.submit_proposal(proposal.dict())
+        self.manager.submit_proposal(proposal.model_dump())
         
         approval = ApprovalRecord(
             proposal_id="p_rej_1",
@@ -88,7 +77,7 @@ class TestPhase3(unittest.TestCase):
             decision="Rejected",
             note="Too risky"
         )
-        self.manager.record_approval(approval.dict())
+        self.manager.record_approval(approval.model_dump())
         
         state = self.manager.get_state()
         self.assertEqual(state["current_proposal"]["state"], ProposalState.REJECTED)

@@ -2,10 +2,17 @@ import json
 from pathlib import Path
 from datetime import datetime
 
+from app.config.settings import get_settings
+
 class StateManager:
     def __init__(self, workspace_root: str):
+        self.settings = get_settings()
         self.workspace_root = Path(workspace_root).absolute()
-        self.state_path = self.workspace_root / ".agent_ide" / "project_state.json"
+        self.state_path = self.workspace_root / self.settings.PROJECT_STATE_FILENAME
+        # Maintain backward compatibility if needed, though settings should be authoritative
+        if not self.state_path.exists():
+             # Fallback to .agent_ide/project_state.json if filename is different
+             self.state_path = self.workspace_root / ".agent_ide" / "project_state.json"
 
     def _load_state(self) -> dict:
         if not self.state_path.exists():

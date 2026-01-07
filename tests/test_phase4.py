@@ -1,15 +1,9 @@
-import sys
-import os
 import unittest
-import json
 from pathlib import Path
 
-# Add app to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
-
-from proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
-from utils.hashing import calculate_content_hash
-from utils.diffing import generate_unified_diff
+from app.proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
+from app.utils.hashing import calculate_content_hash
+from app.utils.diffing import generate_unified_diff
 
 class TestPhase4(unittest.TestCase):
     def setUp(self):

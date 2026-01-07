@@ -1,15 +1,11 @@
-import sys
-import os
 import unittest
 import json
 import shutil
 from pathlib import Path
 
-# Add app to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
-
-from orchestration.runtime import GraphRuntime
-from proposals.artifacts import ProposalArtifactManager
+from app.orchestration.runtime import GraphRuntime
+from app.proposals.artifacts import ProposalArtifactManager
+from app.runtime.events import EventImpact
 
 class TestPhase6(unittest.TestCase):
     def setUp(self):
@@ -18,12 +14,7 @@ class TestPhase6(unittest.TestCase):
             shutil.rmtree(self.workspace)
         self.workspace.mkdir(parents=True)
         (self.workspace / "documents" / "RUN_LOGS").mkdir(parents=True)
-        (self.workspace / ".agent_ide").mkdir()
         
-        self.state_path = self.workspace / ".agent_ide" / "project_state.json"
-        with open(self.state_path, "w") as f:
-            json.dump({"schema_version": 1}, f)
-
         self.runtime = GraphRuntime(str(self.workspace))
         self.artifact_manager = ProposalArtifactManager(str(self.workspace))
 
@@ -65,6 +56,8 @@ class TestPhase6(unittest.TestCase):
         event = self.runtime.emit_event("PROPOSAL_CREATED", {"id": "p1"})
         self.assertEqual(event["type"], "PROPOSAL_CREATED")
         self.assertIn("timestamp", event)
+        self.assertEqual(event["impact"], EventImpact.INFO)
+        self.assertEqual(event["session_id"], "default_session")
 
 if __name__ == "__main__":
     unittest.main()

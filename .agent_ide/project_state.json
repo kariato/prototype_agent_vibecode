@@ -1,7 +1,7 @@
 {
     "schema_version": 1,
     "created_at": "2026-01-06T18:18:00Z",
-    "updated_at": "2026-01-06T18:18:00Z",
+    "updated_at": 1767754453.924632,
     "workspace": {
         "root_path": "/Volumes/NVME/Source/prototype_agent_vibecode",
         "initialized": true
@@ -22,6 +22,76 @@
             "gate": "A",
             "timestamp": "2026-01-06T18:18:00Z",
             "note": "Phase 01 docs approved via user acceptance of the CGPT 5.2 plan."
+        },
+        {
+            "proposal_id": "demo_p12",
+            "phase_id": "12",
+            "gate": "A",
+            "decision": "Approved",
+            "timestamp": 1767754384.937072,
+            "note": "Approved - looks good"
+        },
+        {
+            "proposal_id": "demo_p12",
+            "phase_id": "12",
+            "gate": "A",
+            "decision": "Approved",
+            "timestamp": 1767754446.540288,
+            "note": "Approved - looks good"
+        }
+    ],
+    "current_proposal": {
+        "proposal_id": "demo_p12",
+        "proposal_type": "doc",
+        "phase_id": "12",
+        "summary": "UI Demo",
+        "targets": [
+            "documents/RUN_LOGS/demo.md"
+        ],
+        "risk_flags": [],
+        "payload": {
+            "proposal_id": "demo_p12",
+            "phase_id": "12",
+            "summary": "UI Demo",
+            "files": [],
+            "actions": [
+                {
+                    "type": "AppendLog",
+                    "path": "documents/RUN_LOGS/demo.md",
+                    "content": "demo content"
+                }
+            ]
+        },
+        "state": "Awaiting_Verification",
+        "validation_messages": [],
+        "created_at": 1767754439.325466,
+        "updated_at": 1767754439.325473
+    },
+    "runtime": {
+        "pending_proposal_path": "/Volumes/NVME/Source/prototype_agent_vibecode/.agent_ide/artifacts/proposal_20260106_215359_demo_p12.json"
+    },
+    "events": [
+        {
+            "timestamp": 1767754229.655992,
+            "type": "PROPOSAL_CREATED",
+            "impact": "info",
+            "session_id": "default_session",
+            "node_name": null,
+            "payload": {
+                "proposal_id": "demo_p12",
+                "path": "/Volumes/NVME/Source/prototype_agent_vibecode/.agent_ide/artifacts/proposal_20260106_215029_demo_p12.json"
+            }
+        },
+        {
+            "timestamp": 1767754439.327067,
+            "type": "PROPOSAL_CREATED",
+            "impact": "info",
+            "session_id": "default_session",
+            "node_name": null,
+            "payload": {
+                "proposal_id": "demo_p12",
+                "path": "/Volumes/NVME/Source/prototype_agent_vibecode/.agent_ide/artifacts/proposal_20260106_215359_demo_p12.json"
+            }
         }
     ]
 }

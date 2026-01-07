@@ -7,8 +7,11 @@ from app.proposals.models import UnifiedProposal, ProposalType, ProposalState, A
 from app.docops.writer import DocWriter
 from app.state.manager import StateManager
 
-# Configuration (should be from .env in future)
-WORKSPACE_ROOT = "/Volumes/NVME/Source/prototype_agent_vibecode"
+from app.config.settings import get_settings
+
+# Load configuration
+settings = get_settings()
+WORKSPACE_ROOT = settings.WORKSPACE_ROOT_DEFAULT
 
 writer = DocWriter(WORKSPACE_ROOT)
 state_manager = StateManager(WORKSPACE_ROOT)
@@ -69,9 +72,9 @@ def handle_proposal_submission(proposal_json):
             # DocOps validation (already mostly handled by pydantic if we used it here)
         else:
             # PatchOps Validation
-            from proposals.patchops import PatchOpsProposal, PatchActionType
-            from utils.hashing import calculate_file_hash, calculate_content_hash
-            from utils.diffing import generate_unified_diff
+            from app.proposals.patchops import PatchOpsProposal, PatchActionType
+            from app.utils.hashing import calculate_file_hash, calculate_content_hash
+            from app.utils.diffing import generate_unified_diff
             
             p_patch = PatchOpsProposal(**data)
             proposal.targets = [f.path for f in p_patch.files]
@@ -135,7 +138,7 @@ def handle_proposal_submission(proposal_json):
             proposal.state = ProposalState.AWAITING_APPROVAL
             # Store diff artifact if Patch
             if p_type == ProposalType.PATCH:
-                from utils.diffing import generate_patch_summary
+                from app.utils.diffing import generate_patch_summary
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 diff_filename = f"patch_{timestamp}_phase{proposal.phase_id}.diff"
                 diff_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / diff_filename
@@ -150,7 +153,7 @@ def handle_proposal_submission(proposal_json):
                 proposal.payload["diff_file"] = diff_filename
                 proposal.payload["diff_content"] = full_diff_content
 
-        state_manager.submit_proposal(proposal.dict())
+        state_manager.submit_proposal(proposal.model_dump())
         _, status_text = get_current_state()
         return status_text, proposal.payload
     except Exception as e:
@@ -170,12 +173,12 @@ def handle_approval(decision, note=""):
         note=note
     )
     
-    state_manager.record_approval(approval.model_dump()) # use model_dump as per test warning
+    state_manager.record_approval(approval.model_dump())
     _, status_text = get_current_state()
     return status_text
 
 def apply_current_proposal():
-    from runtime.execution_engine import execute_patch_proposal
+    from app.runtime.execution_engine import execute_patch_proposal
     state = state_manager.get_state()
     proposal = state.get("current_proposal")
     if not proposal: return "No proposal."
@@ -187,7 +190,7 @@ def apply_current_proposal():
         return f"Error: {str(e)}"
 
 def handle_verification(output, result):
-    from runtime.verification import record_verification
+    from app.runtime.verification import record_verification
     state = state_manager.get_state()
     proposal = state.get("current_proposal")
     if not proposal: return "No proposal."
@@ -237,6 +240,36 @@ def bootstrap_workspace():
         return "Workspace bootstrapped successfully."
     except Exception as e:
         return f"Bootstrap failed: {str(e)}"
+
+from app.runtime.events import EventImpact
+
+def format_visual_timeline(events: list) -> str:
+    """Formats events into a clean Markdown timeline."""
+    if not events:
+        return "*No events recorded.*"
+    
+    lines = []
+    for e in reversed(events):
+        ts = datetime.fromtimestamp(e['timestamp']).strftime('%H:%M:%S')
+        impact = e.get('impact', 'info')
+        etype = e.get('type', 'EVENT')
+        
+        # Color coding based on impact
+        icon = "ℹ️"
+        if impact == EventImpact.MUTATION:
+            icon = "⚡"
+            etype = f"**{etype}**"
+        elif impact == EventImpact.ERROR:
+            icon = "❌"
+            etype = f"<span style='color:red'>{etype}</span>"
+        elif impact == EventImpact.SYSTEM:
+            icon = "⚙️"
+        
+        line = f"| `{ts}` | {icon} | {etype} |"
+        lines.append(line)
+    
+    header = "| Time | | Event |\n| :--- | :--- | :--- |"
+    return header + "\n" + "\n".join(lines)
 
 def get_documents_list(filter_type="All"):
     doc_dir = Path(WORKSPACE_ROOT) / "documents"
@@ -327,7 +360,7 @@ with gr.Blocks(title="Agent IDE - Phase 9 Hardened UI") as demo:
         with gr.Column(scale=1):
             gr.Markdown("### 📜 Runtime Console")
             checkpoint_view = gr.JSON(label="Last Checkpoint State")
-            event_log = gr.Code(label="Event Log", language="markdown", interactive=False)
+            event_log = gr.Markdown(label="Visual Timeline")
             refresh_hist_btn = gr.Button("Refresh History")
 
     # Event Handlers
@@ -340,13 +373,13 @@ with gr.Blocks(title="Agent IDE - Phase 9 Hardened UI") as demo:
         state = state_manager.get_state()
         runtime_info = state.get("runtime", {})
         events = state.get("events", [])
-        log_text = "\n".join([f"[{datetime.fromtimestamp(e['timestamp']).strftime('%H:%M:%S')}] {e['type']}" for e in events])
+        timeline_md = format_visual_timeline(events)
         
         leftovers = scan_for_recovery()
         recovery_visible = len(leftovers) > 0
         leftovers_text = "\n".join(leftovers)
         
-        return runtime_info, log_text, gr.update(visible=recovery_visible), leftovers_text
+        return runtime_info, timeline_md, gr.update(visible=recovery_visible), leftovers_text
 
     demo.load(refresh_runtime_hist, outputs=[checkpoint_view, event_log, recovery_alert, recovery_list])
     refresh_btn.click(lambda f: gr.update(choices=get_documents_list(f)), inputs=[filter_dropdown], outputs=[doc_list])

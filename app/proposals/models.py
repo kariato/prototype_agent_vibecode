@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import List, Optional, Union, Any
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 class ProposalType(str, Enum):
     DOC = "doc"
@@ -28,13 +28,13 @@ class UnifiedProposal(BaseModel):
     payload: Any  # This will hold DocOpsProposal or PatchOpsProposal
     state: ProposalState = ProposalState.PROPOSAL_CREATED
     validation_messages: List[str] = []
-    created_at: float = Field(default_factory=lambda: datetime.utcnow().timestamp())
-    updated_at: float = Field(default_factory=lambda: datetime.utcnow().timestamp())
+    created_at: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
+    updated_at: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
 
 class ApprovalRecord(BaseModel):
     proposal_id: str
     phase_id: str
     gate: str  # "A", "B", "C"
     decision: str  # "Approved", "Rejected"
-    timestamp: float = Field(default_factory=lambda: datetime.utcnow().timestamp())
+    timestamp: float = Field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     note: Optional[str] = None

@@ -1,31 +1,21 @@
-import sys
-import os
 import unittest
 import json
+import shutil
 from pathlib import Path
 
-# Add app to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "app"))
-
-from proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
-from patchops.engine import PatchEngine
-from state.manager import StateManager
-from utils.hashing import calculate_content_hash
+from app.proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
+from app.patchops.engine import PatchEngine
+from app.state.manager import StateManager
+from app.utils.hashing import calculate_content_hash
 
 class TestPhase5(unittest.TestCase):
     def setUp(self):
         self.workspace = Path("/tmp/agent_ide_test_phase5")
         if self.workspace.exists():
-            import shutil
             shutil.rmtree(self.workspace)
         self.workspace.mkdir(parents=True)
         (self.workspace / "documents" / "RUN_LOGS").mkdir(parents=True)
-        (self.workspace / ".agent_ide").mkdir()
         
-        self.state_path = self.workspace / ".agent_ide" / "project_state.json"
-        with open(self.state_path, "w") as f:
-            json.dump({"schema_version": 1}, f)
-
         self.engine = PatchEngine(str(self.workspace))
         self.manager = StateManager(str(self.workspace))
 
