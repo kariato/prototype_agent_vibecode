@@ -245,6 +245,25 @@ def handle_verification(output, result):
     
     return f"Verification marked PASS. Proposal {proposal['proposal_id']} completed."
 
+def scan_for_recovery():
+    """Scans the workspace for leftover .tmp, .bak, or .del files from failed transactions."""
+    leftovers = []
+    for root, _, filenames in os.walk(WORKSPACE_ROOT):
+        for filename in filenames:
+            if ".tmp." in filename or ".bak." in filename or ".del." in filename:
+                leftovers.append(os.path.join(root, filename))
+    return leftovers
+
+def perform_cleanup():
+    """Deletes all detected leftover transaction files."""
+    leftovers = scan_for_recovery()
+    for f in leftovers:
+        try:
+            os.remove(f)
+        except:
+            pass
+    return f"Cleaned up {len(leftovers)} files."
+
 def bootstrap_workspace():
     try:
         # Directories
@@ -314,6 +333,12 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
         # Center Column: Chat & Approval
         with gr.Column(scale=2):
             gr.Markdown("### Approval Center")
+            
+            with gr.Accordion("🚨 Recovery Required!", open=True, visible=False) as recovery_alert:
+                gr.Markdown("Leftover transaction files detected (.tmp, .bak, .del). Please clean up or investigate.")
+                recovery_list = gr.Textbox(label="Orphaned Files", lines=3, interactive=False)
+                cleanup_btn = gr.Button("🗑️ Clean Up Artifacts", variant="stop")
+
             proposal_status = gr.Markdown("Status: Loading...")
             
             with gr.Row():
@@ -360,12 +385,18 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
         runtime_info = state.get("runtime", {})
         events = state.get("events", [])
         log_text = "\n".join([f"[{datetime.fromtimestamp(e['timestamp']).strftime('%H:%M:%S')}] {e['type']}" for e in events])
-        return runtime_info, log_text
+        
+        leftovers = scan_for_recovery()
+        recovery_visible = len(leftovers) > 0
+        leftovers_text = "\n".join(leftovers)
+        
+        return runtime_info, log_text, gr.update(visible=recovery_visible), leftovers_text
 
-    demo.load(lambda: get_current_state()[1], outputs=[proposal_status])
+    demo.load(refresh_runtime_hist, outputs=[checkpoint_view, event_log, recovery_alert, recovery_list])
     refresh_btn.click(lambda f: gr.update(choices=get_documents_list(f)), inputs=[filter_dropdown], outputs=[doc_list])
     doc_list.select(load_document, inputs=[doc_list], outputs=[preview_box])
-    refresh_hist_btn.click(refresh_runtime_hist, outputs=[checkpoint_view, event_log])
+    refresh_hist_btn.click(refresh_runtime_hist, outputs=[checkpoint_view, event_log, recovery_alert, recovery_list])
+    cleanup_btn.click(perform_cleanup).then(refresh_runtime_hist, outputs=[checkpoint_view, event_log, recovery_alert, recovery_list])
 
     def on_submit(proposal_json):
         # 1. Standard validation
