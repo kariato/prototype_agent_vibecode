@@ -29,10 +29,17 @@ class Settings(BaseSettings):
         "/var/"
     ]
     
-    # LLM (Placeholders)
-    LLM_PROVIDER: str = "openai"
+    # LLM Configuration
+    LLM_PROVIDER: str = "openai"  # "openai", "gemini", "ollama"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_BASE_URL: Optional[str] = "https://api.openai.com/v1"
+    
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-pro"
+    
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3"
 
     class Config:
         env_file = ".env"

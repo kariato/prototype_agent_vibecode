@@ -304,6 +304,51 @@ def load_document(rel_path):
             return f.read()
     return "File not found."
 
+def handle_brain_intent(intent):
+    from app.orchestration.graph import IDEState
+    from app.orchestration.runtime import GraphRuntime
+    
+    runtime = GraphRuntime(WORKSPACE_ROOT)
+    
+    # Initialize State
+    initial_state: IDEState = {
+        "session_id": "session_" + datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "workspace_root": WORKSPACE_ROOT,
+        "phase_id": "01", # Default or detect current
+        "lane": "patch" if "@docs" not in intent else "doc",
+        "intent": intent,
+        "proposal": None,
+        "validation": {"pass": True, "messages": []},
+        "approval": {"status": "pending", "note": ""},
+        "execution": {"status": "idle", "report": []},
+        "verification": {"output": "", "result": ""},
+        "events": [],
+        "errors": [],
+        "repair_count": 0
+    }
+    
+    # Run to pause (await_approval)
+    final_state, checkpoint_id = runtime.run_to_pause(initial_state)
+    
+    if final_state.get("errors"):
+        return f"Error: {final_state['errors'][0]['message']}", None, "", refresh_runtime_hist()[1]
+        
+    proposal = final_state.get("proposal")
+    if not proposal:
+        return "Internal Error: No proposal generated.", None, "", refresh_runtime_hist()[1]
+        
+    # Wrap in UnifiedProposal for the UI
+    status, payload = handle_proposal_submission(json.dumps(proposal))
+    
+    # Sync events from graph to project state
+    p_state = state_manager.get_state()
+    for ev in final_state.get("events", []):
+        p_state.setdefault("events", []).append(ev)
+    state_manager._save_state(p_state)
+    
+    diff_content = payload.get("diff_content", "No diff for this proposal.") if payload else ""
+    return status, payload, f"```diff\n{diff_content}\n```", refresh_runtime_hist()[1]
+
 with gr.Blocks(title="Agent IDE - Phase 9 Hardened UI") as demo:
     gr.Markdown("# Agent IDE - Unified Approval Center")
     
@@ -338,6 +383,10 @@ with gr.Blocks(title="Agent IDE - Phase 9 Hardened UI") as demo:
             
             note_input = gr.Textbox(label="Decision Note", placeholder="Reason for decision...")
             execute_btn = gr.Button("⚡ Execute Action", variant="primary")
+
+            with gr.Row():
+                intent_input = gr.Textbox(label="Agent Intent (AI Brain)", placeholder="e.g., Implement add() in math.py", scale=4)
+                brain_btn = gr.Button("🧠 Think & Plan", variant="primary", scale=1)
 
             with gr.Accordion("Debug: Manual Proposal Entry", open=False):
                 proposal_input = gr.Code(label="Proposal JSON (Draft)", language="json")
@@ -419,6 +468,8 @@ with gr.Blocks(title="Agent IDE - Phase 9 Hardened UI") as demo:
     
     from app.tools.scaffold_phase07 import scaffold_phase07_workspace
     scaffold_btn.click(lambda: f"Scaffold result: {scaffold_phase07_workspace(WORKSPACE_ROOT)}", outputs=[proposal_status])
+
+    brain_btn.click(handle_brain_intent, inputs=[intent_input], outputs=[proposal_status, proposal_payload_view, diff_view, event_log])
 
     pass_btn.click(lambda o: handle_verification(o, "PASS"), inputs=[verif_output], outputs=[verif_status])
     fail_btn.click(lambda o: handle_verification(o, "FAIL"), inputs=[verif_output], outputs=[verif_status])

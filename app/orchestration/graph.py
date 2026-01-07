@@ -3,6 +3,8 @@ from enum import Enum
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
 import json
+from app.llm import LLMClient
+from app.llm.prompts import PLANNING_SYSTEM_PROMPT, IMPLEMENTATION_SYSTEM_PROMPT
 
 class IDEState(TypedDict):
     session_id: str
@@ -34,7 +36,35 @@ def plan_route_node(state: IDEState):
 
 def proposal_assemble_node(state: IDEState):
     state["events"].append({"type": "STATE_TRANSITION", "node": "proposal_assemble"})
-    # Assembly logic (placeholder)
+    
+    client = LLMClient()
+    
+    if state["lane"] == "doc":
+        system_prompt = PLANNING_SYSTEM_PROMPT
+    else:
+        system_prompt = IMPLEMENTATION_SYSTEM_PROMPT
+        
+    # Generate proposal from LLM
+    try:
+        response_text = client.generate(system_prompt, state["intent"])
+        
+        # Extract JSON (basic extraction in case LLM wraps in markdown)
+        if "```json" in response_text:
+            json_str = response_text.split("```json")[1].split("```")[0].strip()
+        else:
+            json_str = response_text.strip()
+            
+        proposal_payload = json.loads(json_str)
+        state["proposal"] = proposal_payload
+        state["events"].append({
+            "type": "PROPOSAL_CREATED", 
+            "proposal_id": proposal_payload.get("proposal_id"),
+            "summary": proposal_payload.get("summary")
+        })
+    except Exception as e:
+        state["errors"].append({"message": f"LLM generation failed: {str(e)}"})
+        return state
+
     return state
 
 def proposal_validate_node(state: IDEState):
