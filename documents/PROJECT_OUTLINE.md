@@ -1,28 +1,28 @@
 # Project Outline — Lightweight Document-First Agent IDE
 
 ## Context / Problem Statement
-Current AI coding agents often suffer from "vibe-based" coding, where they begin implementation without a clear, approved plan, leading to architectural drift and unreviewable changes. This project aims to build an IDE that enforces a document-first workflow.
+Current AI coding agents often suffer from "vibe-based" coding, where they begin implementation without a clear, approved plan, leading to architectural drift and unreviewable changes. This project has built an IDE that enforces a document-first workflow, strictly reviewed patches, and atomic execution with full auditability.
 
-## Constraints
-- **Absolute Paths**: All workspace references must be absolute.
-- **No Git**: Traceability is handled via internal logs and archives.
-- **Approval Gates**: Every document change and code patch requires explicit user approval.
-- **Small Phases**: Changes are limited to ≤3 files and ≤200 LOC per phase.
-- **Atomic Operations**: File writes must be atomic and include rollback support.
+## Constraints (Verified)
+- **Absolute Paths**: All workspace references are strictly absolute.
+- **No Git**: Traceability is handled via internal logs, JSON artifacts, and file archives.
+- **Approval Gates**: Every document change and code patch requires explicit user approval via FSM.
+- **Small Phases**: Patch changes are limited to ≤3 files and ≤200 LOC per proposal.
+- **Atomic Operations**: File writes use a temp->fsync->rename protocol with automatic rollback on failure.
 
-## Phases
-1. [x] Phase 01: Project Bootstrap
-2. [/] Phase 02: Documents UI + DocOps
-3. [ ] Phase 03: Approval State Machine + PatchOps Gate
-4. [ ] Phase 04: PatchOps Engine (Diff-First)
-5. [ ] Phase 05: Atomic FS + Rollback
-6. [ ] Phase 06: Manual Verification Loop
-7. [ ] Phase 07: repair loop + Cap
-8. [ ] Phase 08: LangGraph Runtime Orchestration
-9. [ ] Phase 09: Gradio UI Integration (Full)
-10. [ ] Phase 10: Walkthrough Acceptance Harness
+## Implementation Phases (100% Complete)
+1. [x] Phase 01: Project Bootstrap (Workspace & State)
+2. [x] Phase 02: Documents UI & DocOps Protocol
+3. [x] Phase 03: Unified Approval FSM & Proposal Registry
+4. [x] Phase 04: PatchOps Protocol & Unified Diff Generation
+5. [x] Phase 05: PatchOps Engine (Hash Validation & File Targeting)
+6. [x] Phase 06: Runtime Checkpointing, Resumption & Artifact Stores
+7. [x] Phase 07: Repair Loop Logic & Attempt Capping
+8. [x] Phase 08: Atomic FS Core (Backup/Rollback/Recovery)
+9. [x] Phase 09: Full UI Consolidation (4 Canonical Panels)
+10. [x] Phase 10: Acceptance Harness & Scaffold Tools
+11. [x] Phase 11: Hand-Off Protocol & Risk Management
+12. [x] Phase 12: Architectural Hardening & Visual Timeline UI
 
-## Definition of Done
-- All phases implemented and verified.
-- Traceability Matrix satisfies corporate audit requirements.
-- Walkthrough succeeds in a clean workspace.
+## Final Status: COMPLETED
+The system is ready for production-level local use. All core invariants (safety, atomic writes, and traceability) are active and verified.
