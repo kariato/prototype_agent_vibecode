@@ -1,3 +1,10 @@
+"""
+app/utils/diffing.py
+
+Utilities for generating unified diffs and patch summaries.
+Used by the PatchOps engine to verify changes and generate artifacts.
+"""
+
 import difflib
 from typing import List
 

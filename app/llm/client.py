@@ -1,3 +1,10 @@
+"""
+app/llm/client.py
+
+Unified client for interacting with multiple LLM providers (OpenAI, Gemini, Ollama).
+Handles prompt submission and response parsing/streaming.
+"""
+
 import os
 import json
 from typing import List, Dict, Any, Optional, Generator, Union
@@ -6,12 +13,27 @@ from app.config.settings import get_settings
 class LLMClient:
     """
     Unified client for interacting with various LLM providers.
+    
+    Attributes:
+        settings (Settings): Global settings object.
+        provider (str): normalized provider name (openai, gemini, ollama).
     """
     def __init__(self):
         self.settings = get_settings()
         self.provider = self.settings.LLM_PROVIDER.lower()
 
     def generate(self, system_prompt: str, user_prompt: str, stream: bool = False) -> Union[str, Generator[str, None, None]]:
+        """
+        Generates text from the configured LLM provider.
+        
+        Args:
+            system_prompt (str): The system instructions.
+            user_prompt (str): The user's input/query.
+            stream (bool): Whether to stream the response as a generator.
+        
+        Returns:
+            Union[str, Generator]: Complete response string or a generator yielding chunks.
+        """
         if self.provider == "openai":
             return self._generate_openai(system_prompt, user_prompt, stream)
         elif self.provider == "gemini":

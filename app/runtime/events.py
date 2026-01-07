@@ -1,3 +1,10 @@
+"""
+app/runtime/events.py
+
+Defines the structure for system events within the IDE.
+Events are used to update the visual timeline and trigger frontend updates.
+"""
+
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
@@ -10,6 +17,9 @@ class EventImpact(str, Enum):
     SYSTEM = "system"   # Initialization, recovery
 
 class IDEEvent(BaseModel):
+    """
+    A single event in the IDE's lifecycle.
+    """
     timestamp: float = Field(default_factory=lambda: datetime.now().timestamp())
     type: str
     impact: EventImpact = EventImpact.INFO

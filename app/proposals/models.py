@@ -1,3 +1,10 @@
+"""
+app/proposals/models.py
+
+Defines the core Pydantic models for the proposal lifecycle.
+Includes enumerations for proposal types and states, as well as the unified proposal envelope.
+"""
+
 from enum import Enum
 from typing import List, Optional, Union, Any
 from pydantic import BaseModel, Field
@@ -19,6 +26,10 @@ class ProposalState(str, Enum):
     FAILED = "Failed"
 
 class UnifiedProposal(BaseModel):
+    """
+    The envelope that contains either a DocOps or PatchOps payload.
+    This is what is tracked in the project state.
+    """
     proposal_id: str
     proposal_type: ProposalType
     phase_id: str

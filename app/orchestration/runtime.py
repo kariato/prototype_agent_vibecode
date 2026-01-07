@@ -1,3 +1,10 @@
+"""
+app/orchestration/runtime.py
+
+Manages the execution lifecycle of the Agent IDE's LangGraph.
+Handles checkpointing, state resumption, and event emission to the UI.
+"""
+
 import json
 from pathlib import Path
 from datetime import datetime
@@ -14,6 +21,9 @@ class GraphRuntime:
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     def _save_checkpoint(self, state: IDEState, node_name: str):
+        """
+        Persists the current graph state to a JSON artifact.
+        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         checkpoint_id = f"chk_{timestamp}_{node_name}"
         artifact_path = self.artifacts_dir / f"{checkpoint_id}.json"
@@ -37,7 +47,14 @@ class GraphRuntime:
 
     def run_to_pause(self, initial_state: IDEState):
         """
-        Executes the graph until it hits a pause point (AwaitApproval or AwaitUserVerification).
+        Executes the graph from the given state until it hits a logical pause point.
+        Pause points are typically user approval steps (gates).
+        
+        Args:
+            initial_state (IDEState): The starting state for the run.
+            
+        Returns:
+            tuple: (Final State, Checkpoint ID)
         """
         # In a real langgraph, this would use thread_id and checkpointing
         # Here we simulate the sequence for Phase 6
@@ -52,7 +69,8 @@ class GraphRuntime:
 
     def resume(self, checkpoint_id: str):
         """
-        Restores state from a checkpoint and returns it.
+        Loads the graph state from a specific checkpoint ID.
+        Used to resume execution after a user action (e.g., approval).
         """
         artifact_path = self.artifacts_dir / f"{checkpoint_id}.json"
         if not artifact_path.exists():

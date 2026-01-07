@@ -1,3 +1,13 @@
+"""
+app/tools/doc_writer.py
+
+The pure side-effect tool for writing documents to the filesystem.
+Implements the rigid DocOps logic:
+- Atomic file writes.
+- Automatic archiving of old versions (RewriteDoc).
+- Strict path boundary enforcement (must be in `documents/`).
+"""
+
 import os
 import shutil
 from datetime import datetime, timezone
@@ -6,8 +16,16 @@ from typing import List, Dict, Any, Optional
 
 def apply_docops_actions(workspace_root: str, proposal_id: str, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Applies a list of document operations to the workspace.
-    This is a pure side-effect tool.
+    Applies a list of DocOps actions (Create, Rewrite, Append) to the filesystem.
+    This function is the "actuator" for DocOps proposals.
+    
+    Args:
+        workspace_root (str): Root of the workspace.
+        proposal_id (str): ID of the proposal triggering this write.
+        actions (list): List of action dictionaries from the payload.
+        
+    Returns:
+        dict: A report containing files written, archived, and any errors.
     """
     root = Path(workspace_root).absolute()
     report = {

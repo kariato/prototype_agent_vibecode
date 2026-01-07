@@ -1,3 +1,10 @@
+"""
+app/main.py
+
+The main entry point for the Agent IDE application.
+Initializes the Gradio UI `Blocks` and wires together the State Manager, Runtime, and Tools.
+"""
+
 import gradio as gr
 import json
 import os
@@ -18,6 +25,12 @@ writer = DocWriter(WORKSPACE_ROOT)
 state_manager = StateManager(WORKSPACE_ROOT)
 
 def get_current_state():
+    """
+    Fetches the current proposal and formats it for the UI.
+    
+    Returns:
+         tuple: (State String, Detailed Markdown)
+    """
     state = state_manager.get_state()
     proposal = state.get("current_proposal")
     if not proposal:
@@ -31,6 +44,16 @@ def get_current_state():
     return proposal["state"], status_text
 
 def handle_proposal_submission(proposal_json):
+    """
+    Validates and processes a raw JSON proposal submission from the UI.
+    Determines if it's a DocOps or PatchOps proposal and runs initial validation.
+    
+    Args:
+        proposal_json (str): Raw JSON string.
+    
+    Returns:
+        tuple: (Status Message, Payload Dict or None)
+    """
     try:
         # Handle @docs command
         if proposal_json.startswith("@docs"):
@@ -181,6 +204,10 @@ def handle_approval(decision, note=""):
     return status_text
 
 def apply_current_proposal():
+    """
+    Executes the currently pending proposal if it is in an approved state.
+    Routes to the appropriate runtime (DocOps or PatchOps) based on type.
+    """
     from app.runtime.execution_engine import execute_patch_proposal
     state = state_manager.get_state()
     proposal = state.get("current_proposal")

@@ -1,3 +1,11 @@
+"""
+app/orchestration/graph.py
+
+Defines the LangGraph workflow for the Agent IDE.
+This file contains the state definition and node logic for the agent's lifecycle:
+Intake -> Route -> Plan/Implement -> Validate -> Approval -> Execution -> Verification.
+"""
+
 from typing import TypedDict, List, Optional, Any, Union
 from enum import Enum
 from langgraph.graph import StateGraph, END
@@ -27,6 +35,10 @@ def intake_node(state: IDEState):
     return state
 
 def plan_route_node(state: IDEState):
+    """
+    Decides the execution lane (doc or patch) based on user intent.
+    If the intent contains '@docs', it routes to the documentation lane.
+    """
     state["events"].append({"type": "STATE_TRANSITION", "node": "plan_route"})
     if "@docs" in state["intent"]:
         state["lane"] = "doc"
@@ -34,7 +46,14 @@ def plan_route_node(state: IDEState):
         state["lane"] = "patch"
     return state
 
+    return state
+
 def proposal_assemble_node(state: IDEState):
+    """
+    Invokes the AI Brain (LLM) to generate a structured proposal.
+    Selects the prompt based on the determined lane (Planning vs. Implementation).
+    Parses the JSON response and updates the state.
+    """
     state["events"].append({"type": "STATE_TRANSITION", "node": "proposal_assemble"})
     
     client = LLMClient()

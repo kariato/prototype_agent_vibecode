@@ -1,3 +1,10 @@
+"""
+app/runtime/docops.py
+
+The runtime module for executing DocOps proposals.
+Responsible for validation, gate enforcement (checking APPROVED state), and invoking the DocWriter tool.
+"""
+
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 from .docops_schema import DocOpsPayload, DocActionType
@@ -50,6 +57,20 @@ def validate_docops_payload(payload: Dict[str, Any], workspace_root: str) -> Tup
 def execute_docops(workspace_root: str, proposal_id: str, session_id: str = "default") -> Dict[str, Any]:
     """
     Executes an approved DocOps proposal.
+    
+    1. Fetches the proposal from state.
+    2. Enforces Gate A (must be APPROVED).
+    3. Validates the payload against DocOpsSchema.
+    4. Calls app.tools.doc_writer to perform the write.
+    5. Updates the state with the result.
+    
+    Args:
+        workspace_root (str): The active workspace root.
+        proposal_id (str): ID of the proposal to execute.
+        session_id (str): The active user session.
+        
+    Returns:
+        Dict: An execution report.
     """
     state_manager = StateManager(workspace_root)
     proposal_data = state_manager.get_proposal(proposal_id)

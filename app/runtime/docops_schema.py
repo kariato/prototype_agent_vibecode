@@ -1,3 +1,11 @@
+"""
+app/runtime/docops_schema.py
+
+Defines the Pydantic schemas for the DocOps runtime.
+These schemas strictly define what a "DocOps" action is (CreateDoc, RewriteDoc, etc.)
+and enforce constraints like bundle limits.
+"""
+
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Any
 from enum import Enum
@@ -15,6 +23,10 @@ class DocAction(BaseModel):
     mode: Optional[str] = None
 
 class DocOpsPayload(BaseModel):
+    """
+    The payload for a DocOps proposal.
+    Contains a list of ordered actions to perform on documents.
+    """
     actions: List[DocAction]
 
     @validator("actions")

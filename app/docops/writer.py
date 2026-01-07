@@ -1,3 +1,10 @@
+"""
+app/docops/writer.py [LEGACY]
+
+DEPRECATED: This module has been superseded by `app/tools/doc_writer.py` as of Phase 15.
+It is kept for backward compatibility with older tests/states but should not be used in new code.
+"""
+
 import os
 import shutil
 from datetime import datetime, timezone
@@ -5,7 +12,12 @@ from pathlib import Path
 from .protocol import DocOpsAction, ActionType
 
 class DocWriter:
+    """
+    [LEGACY] Handles file operations for documents.
+    Replaced by functional `app/tools/doc_writer.py`.
+    """
     def __init__(self, workspace_root: str):
+        """Initializes the legacy DocWriter with a workspace root."""
         self.workspace_root = Path(workspace_root).absolute()
 
     def _get_absolute_path(self, relative_path: str) -> Path:

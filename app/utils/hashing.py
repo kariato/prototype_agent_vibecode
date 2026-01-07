@@ -1,3 +1,10 @@
+"""
+app/utils/hashing.py
+
+Utilities for calculating SHA-256 hashes of files and strings.
+Used for integrity verification in PatchOps and DocOps.
+"""
+
 import hashlib
 from pathlib import Path
 from typing import Optional

@@ -1,3 +1,11 @@
+"""
+app/runtime/execution_engine.py
+
+Entry point for executing approved PatchOps proposals.
+Validates state (must be APPROVED) and delegates to the transactional PatchEngine.
+Also handles logging and state updates.
+"""
+
 import json
 from pathlib import Path
 from app.patchops.engine import PatchEngine
@@ -5,6 +13,17 @@ from app.proposals.patchops import PatchOpsProposal
 from app.proposals.models import ProposalType, ProposalState
 
 def execute_patch_proposal(workspace_root: str, proposal_id: str, session_id: str) -> dict:
+    """
+    Executes a Code Patch (Gate B).
+    
+    1. Verifies the proposal is APPROVED.
+    2. Instantiates PatchEngine to apply changes transactionally.
+    3. Writes a run log to documents/RUN_LOGS/.
+    4. Transitions state to Awaiting_Verification.
+    
+    Returns:
+        dict: Status report.
+    """
     from app.state.manager import StateManager
     state_manager = StateManager(workspace_root)
     state = state_manager.get_state()

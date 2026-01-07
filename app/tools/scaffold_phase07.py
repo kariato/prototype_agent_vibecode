@@ -1,3 +1,10 @@
+"""
+app/tools/scaffold_phase07.py
+
+A utility tool to verify system behavior by scaffolding a mock project.
+Used during Phase 7 integration testing to create a known state (adder.py).
+"""
+
 import os
 from pathlib import Path
 

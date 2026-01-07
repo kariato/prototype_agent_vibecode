@@ -1,3 +1,10 @@
+"""
+app/orchestration/doc_lane.py [LEGACY]
+
+DEPRECATED: Vestigial mock implementation of a documentation lane.
+Not used in the active LangGraph runtime.
+"""
+
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, END
 import json

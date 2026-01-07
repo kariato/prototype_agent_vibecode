@@ -1,3 +1,10 @@
+"""
+app/proposals/patchops.py
+
+Defines the schema for Code Implementation proposals (PatchOps).
+Includes the atomic actions (create/update/delete) and hash validation fields.
+"""
+
 from typing import List, Optional
 from pydantic import BaseModel
 from enum import Enum
@@ -15,6 +22,10 @@ class PatchAction(BaseModel):
     content: Optional[str] = None
 
 class PatchOpsProposal(BaseModel):
+    """
+    A proposal to mutate the codebase.
+    Contains a list of ordered atomic file operations.
+    """
     version: int = 1
     proposal_id: str
     phase_id: str

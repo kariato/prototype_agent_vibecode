@@ -1,3 +1,10 @@
+"""
+app/docops/protocol.py [LEGACY]
+
+DEPRECATED: This module defines the Pydantic models for the legacy DocOps implementation.
+Superseded by `app/runtime/docops_schema.py` as of Phase 15.
+"""
+
 import json
 from enum import Enum
 from typing import List, Optional, Union

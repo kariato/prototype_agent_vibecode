@@ -1,3 +1,10 @@
+"""
+app/state/manager.py
+
+Manages the persistence and retrieval of the global project state (project_state.json).
+This is the "database" of the agent, tracking proposals, approvals, and phase statuses.
+"""
+
 import json
 from pathlib import Path
 from datetime import datetime
@@ -5,7 +12,15 @@ from datetime import datetime
 from app.config.settings import get_settings
 
 class StateManager:
+    """
+    Interface for reading/writing the JSON state file.
+    Handles storage of the 'Current Proposal' pointer and the audit logs (Approvals, Phase History).
+    """
     def __init__(self, workspace_root: str):
+        """
+        Initializes the state path based on settings.
+        Includes a fallback for legacy state locations.
+        """
         self.settings = get_settings()
         self.workspace_root = Path(workspace_root).absolute()
         self.state_path = self.workspace_root / self.settings.PROJECT_STATE_FILENAME

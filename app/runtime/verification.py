@@ -1,8 +1,29 @@
+"""
+app/runtime/verification.py
+
+Handles the verification stage of the proposal lifecycle.
+Records test results and triggers automated repairs if verification fails.
+"""
+
 from pathlib import Path
 from app.state.manager import StateManager
 from app.orchestration.repair_lane import RepairLane
 
 def record_verification(workspace_root: str, proposal_id: str, session_id: str, passed: bool, raw_output: str) -> dict:
+    """
+    Records the outcome of a verification run (e.g., tests passed/failed).
+    If failed, it invokes the RepairLane to propose a fix.
+    
+    Args:
+        workspace_root (str): Workspace root path.
+        proposal_id (str): ID of the proposal being verified.
+        session_id (str): Active session ID.
+        passed (bool): Whether the verification passed.
+        raw_output (str): Stdout/stderr from the verification command.
+        
+    Returns:
+        dict: Status object (e.g., "verified_pass" or "repair_proposed").
+    """
     state_manager = StateManager(workspace_root)
     state = state_manager.get_state()
     proposal = state.get("current_proposal")

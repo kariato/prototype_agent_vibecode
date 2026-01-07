@@ -1,3 +1,9 @@
+"""
+app/config/env.py
+
+Utilities for loading environment variables from .env files.
+"""
+
 import os
 from dotenv import load_dotenv
 from pathlib import Path

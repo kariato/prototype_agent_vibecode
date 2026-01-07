@@ -1,3 +1,10 @@
+"""
+app/orchestration/repair_lane.py
+
+Handles automated repair logic for failed verification steps.
+Generates PatchOps proposals to fix common errors (e.g., test failures).
+"""
+
 from typing import List
 from app.proposals.patchops import PatchOpsProposal, PatchAction, PatchActionType
 
@@ -7,9 +14,18 @@ class RepairLane:
 
     def generate_repair(self, failed_proposal_id: str, error_output: str) -> PatchOpsProposal:
         """
-        Skeleton for repair generation. 
-        For Phase 7, we hardcode the repair for the 'intentional failure' case.
+        Generates a repair proposal based on error output.
+        Currently includes heuristic-based repairs for known test failure patterns.
+        
+        Args:
+            failed_proposal_id (str): The ID of the proposal that failed verification.
+            error_output (str): The stdout/stderr from the failed verification step.
+            
+        Returns:
+            PatchOpsProposal: A new proposal containing the fix.
         """
+        # Skeleton for repair generation. 
+        # For Phase 7, we hardcode the repair for the 'intentional failure' case.
         # Scenario:adder.py/tests/test_adder.py where test expects 5 instead of 4
         if "test_adder" in error_output and ("E       assert 4 == 5" in error_output or "E       AssertionError: assert 4 == 5" in error_output):
              return PatchOpsProposal(

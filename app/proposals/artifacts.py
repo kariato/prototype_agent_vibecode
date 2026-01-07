@@ -1,3 +1,10 @@
+"""
+app/proposals/artifacts.py
+
+Manages the persistence of proposal payloads to the `.agent_ide/artifacts` directory.
+Ensures that full proposal data is saved independently of the lightweight state index.
+"""
+
 import json
 from pathlib import Path
 from datetime import datetime
@@ -8,6 +15,16 @@ class ProposalArtifactManager:
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     def save_proposal(self, proposal_id: str, payload: dict) -> Path:
+        """
+        Saves a proposal payload as a dated JSON artifact.
+        
+        Args:
+            proposal_id (str): Unique ID of the proposal.
+            payload (dict): The full proposal dictionary.
+            
+        Returns:
+            Path: Absolute path to the saved artifact.
+        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"proposal_{timestamp}_{proposal_id}.json"
         artifact_path = self.artifacts_dir / filename

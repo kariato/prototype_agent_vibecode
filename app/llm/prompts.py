@@ -1,3 +1,10 @@
+"""
+app/llm/prompts.py
+
+Defines the system prompts used to guide the AI Brain.
+These prompts enforce "Doc-First" and "Small Phase" constraints.
+"""
+
 PLANNING_SYSTEM_PROMPT = """
 You are an expert software architect for the "Anti Gravity" Agent IDE.
 Your goal is to plan a specific implementation phase based on a user's high-level intent.

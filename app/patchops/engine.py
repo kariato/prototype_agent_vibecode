@@ -1,3 +1,11 @@
+"""
+app/patchops/engine.py
+
+Implements the atomic transactional filesystem engine.
+This module ensures that patches are applied in an "all-or-nothing" manner 
+using temporary files, backups, and fsyncs to prevent workspace corruption.
+"""
+
 import os
 import shutil
 import random
@@ -8,7 +16,16 @@ from app.proposals.patchops import PatchOpsProposal, PatchActionType
 from app.utils.hashing import calculate_file_hash, calculate_content_hash
 
 class PatchEngine:
+    """
+    Atomic transaction engine for applying PatchOps proposals.
+    Manages the lifecycle of:
+    1. Staging (creating .tmp files)
+    2. Committing (renaming .tmp -> target, creating .bak backups)
+    3. Cleanup (removing backups/temps on success)
+    4. Rollback (restoring backups on failure)
+    """
     def __init__(self, workspace_root: str):
+        """Initializes the engine with the workspace root."""
         self.workspace_root = Path(workspace_root).absolute()
 
     def _get_abs_path(self, rel_path: str) -> Path:
