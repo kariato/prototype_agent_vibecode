@@ -159,9 +159,6 @@ def apply_current_proposal():
         return "Proposal must be approved first."
     
     try:
-        if proposal["proposal_type"] == ProposalType.PATCH:
-            return "Execution for PatchOps is disabled in Phase 04 (Deferred to Phase 05)."
-
         state_manager.update_proposal_state(ProposalState.EXECUTING)
         
         if proposal["proposal_type"] == ProposalType.DOC:
@@ -173,13 +170,49 @@ def apply_current_proposal():
             state_manager.record_doc_write(proposal["proposal_id"])
             return f"Completed: {len(reports)} doc actions applied."
         else:
-            # PatchOps execution placeholder
-            state_manager.update_proposal_state(ProposalState.COMPLETED)
-            return "Completed: PatchOps execution (placeholder)."
+            # PatchOps execution
+            from proposals.patchops import PatchOpsProposal
+            from patchops.engine import PatchEngine
+            
+            patch_engine = PatchEngine(WORKSPACE_ROOT)
+            p_patch = PatchOpsProposal(**proposal["payload"])
+            results = patch_engine.apply_proposal(p_patch)
+            
+            # Transition to Executing -> Awaiting_Verification (implicit in Completed for now if no verification needed, but Phase 5 requires loop)
+            # We'll stick to the Phase 5 spec: after apply, user must verify.
+            state_manager.update_proposal_state("Awaiting_Verification")
+            
+            log_content = f"# Patch Apply Report\nProposal: {proposal['proposal_id']}\n\n"
+            for r in results:
+                log_content += f"- {r['operation']} {r['path']}: {r['status']}\n"
+            
+            log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_patch_{proposal['proposal_id']}.md"
+            with open(log_path, "w") as f:
+                f.write(log_content)
+                
+            return f"Applied {len(results)} changes. Please verify and paste test output in the Verification tab."
             
     except Exception as e:
         state_manager.update_proposal_state(ProposalState.FAILED)
         return f"Failed: {str(e)}"
+
+def handle_verification(output, result):
+    state = state_manager.get_state()
+    proposal = state.get("current_proposal")
+    if not proposal or proposal["state"] != "Awaiting_Verification":
+        return "No proposal awaiting verification."
+    
+    state_manager.record_verification(proposal["proposal_id"], output, result)
+    
+    # If Failed, log it and prepare for repair (Phase 05 Repair Lane)
+    if result == "FAIL":
+        # Simplified repair log entry
+        log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_verification_{proposal['proposal_id']}_fail.md"
+        with open(log_path, "w") as f:
+            f.write(f"# Verification FAILED\nProposal: {proposal['proposal_id']}\n\n## Output\n```\n{output}\n```")
+        return f"Verification marked FAIL. Repair proposal needed (referencing {proposal['proposal_id']})."
+    
+    return f"Verification marked PASS. Proposal {proposal['proposal_id']} completed."
 
 def get_documents_list(filter_type="All"):
     doc_dir = Path(WORKSPACE_ROOT) / "documents"
@@ -250,6 +283,13 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
                     proposal_payload_view = gr.JSON(label="Payload")
                 with gr.TabItem("Diff Viewer"):
                     diff_view = gr.Markdown("No active patch proposal.")
+                with gr.TabItem("Verification"):
+                    gr.Markdown("### Verification Loop")
+                    verif_output = gr.Textbox(label="Test/Lint Output", placeholder="Paste output here...", lines=5)
+                    with gr.Row():
+                        pass_btn = gr.Button("✅ PASS", variant="primary")
+                        fail_btn = gr.Button("❌ FAIL", variant="stop")
+                    verif_status = gr.Markdown("Status: Pending")
 
     # Event Handlers
     demo.load(lambda: get_current_state()[1], outputs=[proposal_status])
@@ -267,6 +307,9 @@ with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
     reject_btn.click(lambda n: handle_approval("Rejected", n), inputs=[note_input], outputs=[proposal_status])
     
     execute_btn.click(apply_current_proposal, outputs=[proposal_status])
+
+    pass_btn.click(lambda o: handle_verification(o, "PASS"), inputs=[verif_output], outputs=[verif_status])
+    fail_btn.click(lambda o: handle_verification(o, "FAIL"), inputs=[verif_output], outputs=[verif_status])
 
 if __name__ == "__main__":
     demo.launch()

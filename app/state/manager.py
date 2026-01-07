@@ -54,3 +54,18 @@ class StateManager:
         if "current_proposal" in state and state["current_proposal"]["proposal_id"] == proposal_id:
             state["current_proposal"]["state"] = "Completed"
         self._save_state(state)
+
+    def record_verification(self, proposal_id: str, output: str, result: str):
+        state = self._load_state()
+        if "current_proposal" in state and state["current_proposal"]["proposal_id"] == proposal_id:
+            state["current_proposal"]["verification_output"] = output
+            state["current_proposal"]["state"] = "Completed" if result == "PASS" else "Failed"
+            
+            # Log verification
+            state.setdefault("verifications", []).append({
+                "proposal_id": proposal_id,
+                "result": result,
+                "timestamp": datetime.now().timestamp(),
+                "output_snippet": output[:200]
+            })
+        self._save_state(state)
