@@ -14,18 +14,32 @@ class StateManager:
             return json.load(f)
 
     def _save_state(self, state: dict):
-        state["updated_at"] = datetime.utcnow().timestamp() # Simplified for now
+        state["updated_at"] = datetime.now().timestamp()
         with open(self.state_path, "w") as f:
             json.dump(state, f, indent=4)
 
-    def record_approval(self, phase_id: str, gate: str, note: str):
+    def get_state(self) -> dict:
+        return self._load_state()
+
+    def submit_proposal(self, proposal_dict: dict):
         state = self._load_state()
-        state.setdefault("approvals", []).append({
-            "phase_id": phase_id,
-            "gate": gate,
-            "timestamp": datetime.utcnow().timestamp(),
-            "note": note
-        })
+        state["current_proposal"] = proposal_dict
+        self._save_state(state)
+
+    def update_proposal_state(self, state_str: str, validation_messages: list = None):
+        state = self._load_state()
+        if "current_proposal" in state:
+            state["current_proposal"]["state"] = state_str
+            if validation_messages is not None:
+                state["current_proposal"]["validation_messages"] = validation_messages
+            self._save_state(state)
+
+    def record_approval(self, approval_dict: dict):
+        state = self._load_state()
+        state.setdefault("approvals", []).append(approval_dict)
+        # Update current proposal state if it matches
+        if "current_proposal" in state and state["current_proposal"]["proposal_id"] == approval_dict["proposal_id"]:
+            state["current_proposal"]["state"] = "Approved" if approval_dict["decision"] == "Approved" else "Rejected"
         self._save_state(state)
 
     def update_phase_status(self, phase_id: str, status: str):
@@ -35,17 +49,8 @@ class StateManager:
 
     def record_doc_write(self, proposal_id: str):
         state = self._load_state()
-        state.setdefault("documents", {})["last_write_at"] = datetime.utcnow().timestamp()
+        state.setdefault("documents", {})["last_write_at"] = datetime.now().timestamp()
         state["documents"]["last_write_proposal_id"] = proposal_id
-        state["documents"]["pending_status"] = "written"
-        self._save_state(state)
-
-    def propose_docops(self, proposal_id: str, targets: list[str], actions_count: int):
-        state = self._load_state()
-        state.setdefault("documents", {})
-        state["documents"]["pending_proposal_id"] = proposal_id
-        state["documents"]["pending_created_at"] = datetime.utcnow().timestamp()
-        state["documents"]["pending_targets"] = targets
-        state["documents"]["pending_actions_count"] = actions_count
-        state["documents"]["pending_status"] = "proposed"
+        if "current_proposal" in state and state["current_proposal"]["proposal_id"] == proposal_id:
+            state["current_proposal"]["state"] = "Completed"
         self._save_state(state)

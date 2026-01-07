@@ -1,15 +1,185 @@
 import gradio as gr
 import os
 from pathlib import Path
-from docops.protocol import parse_docops, expand_action, ActionType
-from docops.writer import DocWriter
-from state.manager import StateManager
+from proposals.models import UnifiedProposal, ProposalType, ProposalState, ApprovalRecord
 
 # Configuration (should be from .env in future)
 WORKSPACE_ROOT = "/Volumes/NVME/Source/prototype_agent_vibecode"
 
 writer = DocWriter(WORKSPACE_ROOT)
 state_manager = StateManager(WORKSPACE_ROOT)
+
+def get_current_state():
+    state = state_manager.get_state()
+    proposal = state.get("current_proposal")
+    if not proposal:
+        return "Idle", "No active proposal."
+    
+    status_text = f"**Type:** {proposal['proposal_type']} | **State:** {proposal['state']}\n"
+    status_text += f"**Summary:** {proposal['summary']}\n"
+    if proposal.get("validation_messages"):
+        status_text += "**Validation:**\n" + "\n".join([f"- {m}" for m in proposal["validation_messages"]])
+    
+    return proposal["state"], status_text
+
+def handle_proposal_submission(proposal_json):
+    try:
+        data = json.loads(proposal_json)
+        
+        # Determine type
+        is_doc = any(a.get("type", "").endswith("Doc") or a.get("type") == "AppendLog" for a in data.get("actions", []))
+        p_type = ProposalType.DOC if is_doc else ProposalType.PATCH
+        
+        proposal = UnifiedProposal(
+            proposal_id=data.get("proposal_id", "manual_123"),
+            proposal_type=p_type,
+            phase_id=data.get("phase_id", "00"),
+            summary=data.get("summary", "Manual Proposal"),
+            targets=[],
+            payload=data
+        )
+        
+        validation_errors = []
+        diffs_to_save = []
+        
+        if p_type == ProposalType.DOC:
+            proposal.targets = [a.get("path", "unknown") for a in data.get("actions", [])]
+            # DocOps validation (already mostly handled by pydantic if we used it here)
+        else:
+            # PatchOps Validation
+            from proposals.patchops import PatchOpsProposal, PatchActionType
+            from utils.hashing import calculate_file_hash, calculate_content_hash
+            from utils.diffing import generate_unified_diff
+            
+            p_patch = PatchOpsProposal(**data)
+            proposal.targets = [f.path for f in p_patch.files]
+            
+            if len([f for f in p_patch.files if "test" not in f.path]) > 3:
+                validation_errors.append("Too many non-test files in one patch (max 3).")
+            
+            for file_patch in p_patch.files:
+                abs_p = Path(WORKSPACE_ROOT) / file_patch.path
+                
+                # Boundary check
+                if not str(abs_p.absolute()).startswith(WORKSPACE_ROOT):
+                    validation_errors.append(f"Forbidden path: {file_patch.path}")
+                
+                # Protected paths
+                if "documents" in file_patch.path or ".agent_ide" in file_patch.path or file_patch.path == ".env":
+                    validation_errors.append(f"Protected path: {file_patch.path}")
+
+                current_hash = calculate_file_hash(abs_p)
+                current_content = ""
+                if abs_p.exists():
+                    with open(abs_p, "r") as f:
+                        current_content = f.read()
+
+                if file_patch.operation == PatchActionType.CREATE:
+                    if abs_p.exists():
+                        validation_errors.append(f"File already exists: {file_patch.path}")
+                    if calculate_content_hash(file_patch.content) != file_patch.post_hash:
+                        validation_errors.append(f"Post-hash mismatch for {file_patch.path}")
+                    diffs_to_save.append({
+                        "path": file_patch.path,
+                        "diff": generate_unified_diff("", file_patch.content, file_patch.path)
+                    })
+
+                elif file_patch.operation == PatchActionType.UPDATE:
+                    if not abs_p.exists():
+                        validation_errors.append(f"File not found: {file_patch.path}")
+                    if current_hash != file_patch.pre_hash:
+                        validation_errors.append(f"Hash mismatch for {file_patch.path}. Stale patch?")
+                    if calculate_content_hash(file_patch.content) != file_patch.post_hash:
+                        validation_errors.append(f"Post-hash mismatch for {file_patch.path}")
+                    diffs_to_save.append({
+                        "path": file_patch.path,
+                        "diff": generate_unified_diff(current_content, file_patch.content, file_patch.path)
+                    })
+
+                elif file_patch.operation == PatchActionType.DELETE:
+                    if not abs_p.exists():
+                        validation_errors.append(f"File not found: {file_patch.path}")
+                    if current_hash != file_patch.pre_hash:
+                        validation_errors.append(f"Hash mismatch for {file_patch.path}")
+                    diffs_to_save.append({
+                        "path": file_patch.path,
+                        "diff": generate_unified_diff(current_content, "", file_patch.path)
+                    })
+
+        if validation_errors:
+            proposal.state = ProposalState.FAILED
+            proposal.validation_messages = validation_errors
+        else:
+            proposal.state = ProposalState.AWAITING_APPROVAL
+            # Store diff artifact if Patch
+            if p_type == ProposalType.PATCH:
+                from utils.diffing import generate_patch_summary
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                diff_filename = f"patch_{timestamp}_phase{proposal.phase_id}.diff"
+                diff_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / diff_filename
+                
+                full_diff_content = generate_patch_summary(diffs_to_save)
+                for d in diffs_to_save:
+                    full_diff_content += f"\n--- {d['path']} ---\n{d['diff']}\n"
+                
+                with open(diff_path, "w") as f:
+                    f.write(full_diff_content)
+                
+                proposal.payload["diff_file"] = diff_filename
+                proposal.payload["diff_content"] = full_diff_content
+
+        state_manager.submit_proposal(proposal.dict())
+        _, status_text = get_current_state()
+        return status_text, proposal.payload
+    except Exception as e:
+        return f"Error: {str(e)}", None
+
+def handle_approval(decision, note=""):
+    state = state_manager.get_state()
+    proposal = state.get("current_proposal")
+    if not proposal:
+        return "No active proposal."
+    
+    approval = ApprovalRecord(
+        proposal_id=proposal["proposal_id"],
+        phase_id=proposal.get("phase_id", "00"),
+        gate="B" if proposal["proposal_type"] == ProposalType.PATCH else "A",
+        decision=decision,
+        note=note
+    )
+    
+    state_manager.record_approval(approval.model_dump()) # use model_dump as per test warning
+    _, status_text = get_current_state()
+    return status_text
+
+def apply_current_proposal():
+    state = state_manager.get_state()
+    proposal = state.get("current_proposal")
+    if not proposal or proposal["state"] != ProposalState.APPROVED:
+        return "Proposal must be approved first."
+    
+    try:
+        if proposal["proposal_type"] == ProposalType.PATCH:
+            return "Execution for PatchOps is disabled in Phase 04 (Deferred to Phase 05)."
+
+        state_manager.update_proposal_state(ProposalState.EXECUTING)
+        
+        if proposal["proposal_type"] == ProposalType.DOC:
+            # Re-parse to use the docops protocol logic
+            from docops.protocol import parse_docops, expand_action
+            doc_proposal = parse_docops(json.dumps(proposal["payload"]))
+            expanded_actions = [expand_action(a) for a in doc_proposal.actions]
+            reports = writer.execute_bundle(expanded_actions)
+            state_manager.record_doc_write(proposal["proposal_id"])
+            return f"Completed: {len(reports)} doc actions applied."
+        else:
+            # PatchOps execution placeholder
+            state_manager.update_proposal_state(ProposalState.COMPLETED)
+            return "Completed: PatchOps execution (placeholder)."
+            
+    except Exception as e:
+        state_manager.update_proposal_state(ProposalState.FAILED)
+        return f"Failed: {str(e)}"
 
 def get_documents_list(filter_type="All"):
     doc_dir = Path(WORKSPACE_ROOT) / "documents"
@@ -44,47 +214,8 @@ def load_document(rel_path):
             return f.read()
     return "File not found."
 
-def handle_docops(proposal_json):
-    try:
-        proposal = parse_docops(proposal_json)
-        # In a real app, this would update state and wait for approval
-        # For now, we'll just show the actions
-        actions_str = ""
-        for action in proposal.actions:
-            expanded = expand_action(action)
-            actions_str += f"- {expanded.type}: {expanded.path}\n"
-        return f"Proposal {proposal.proposal_id} validated:\n{actions_str}", proposal_json
-    except Exception as e:
-        return f"Error: {str(e)}", ""
-
-def apply_docops(proposal_json):
-    try:
-        if not proposal_json:
-            return "No proposal to apply."
-        proposal = parse_docops(proposal_json)
-        expanded_actions = [expand_action(a) for a in proposal.actions]
-        reports = writer.execute_bundle(expanded_actions)
-        
-        state_manager.record_doc_write(proposal.proposal_id)
-        
-        # Log the write
-        log_content = f"# DocWrite Report\nProposal: {proposal.proposal_id}\n\n"
-        for r in reports:
-            log_content += f"- {r['action']} {r['path']}: {r['status']}\n"
-            if 'archive_path' in r:
-                log_content += f"  - Archived to: {r['archive_path']}\n"
-        
-        # Simplified log append for now
-        log_path = Path(WORKSPACE_ROOT) / "documents" / "RUN_LOGS" / f"run_write_{proposal.proposal_id}.md"
-        with open(log_path, "w") as f:
-            f.write(log_content)
-        
-        return f"Success! Applied {len(reports)} actions. Log: {log_path.name}"
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-with gr.Blocks(title="Agent IDE - Documents Workspace") as demo:
-    gr.Markdown("# Agent IDE - Documents Workspace")
+with gr.Blocks(title="Agent IDE - Unified Approval Center") as demo:
+    gr.Markdown("# Agent IDE - Unified Approval Center")
     
     with gr.Row():
         # Left Column: Navigator
@@ -94,35 +225,48 @@ with gr.Blocks(title="Agent IDE - Documents Workspace") as demo:
             doc_list = gr.Listbox(choices=get_documents_list(), label="Documents")
             refresh_btn = gr.Button("Refresh")
         
-        # Center Column: Chat/Commands
+        # Center Column: Chat & Approval
         with gr.Column(scale=2):
-            gr.Markdown("### Chat & Commands")
-            chat_box = gr.Textbox(label="Transcript", interactive=False, lines=10)
-            cmd_input = gr.Textbox(label="Command", placeholder="@docs:phase create ...")
-            submit_cmd = gr.Button("Submit")
+            gr.Markdown("### Approval Center")
+            proposal_status = gr.Markdown("Status: Loading...")
             
-            with gr.Accordion("Direct DocOps Entry (Debug)", open=False):
-                proposal_input = gr.Code(label="DocOps JSON", language="json")
-                validate_btn = gr.Button("Validate Proposal")
-                proposal_status = gr.Markdown("Status: Idle")
-                apply_btn = gr.Button("Approve & Write Docs")
+            with gr.Row():
+                approve_btn = gr.Button("✅ Approve", variant="primary")
+                reject_btn = gr.Button("❌ Reject", variant="stop")
+            
+            note_input = gr.Textbox(label="Approval/Rejection Note", placeholder="Reason for decision...")
+            execute_btn = gr.Button("⚡ Execute Action", variant="primary")
 
-        # Right Column: Tabs
+            with gr.Accordion("Debug: Manual Proposal Entry", open=False):
+                proposal_input = gr.Code(label="Proposal JSON", language="json")
+                submit_proposal_btn = gr.Button("Submit Proposal")
+
+        # Right Column: Preview
         with gr.Column(scale=2):
             with gr.Tabs():
                 with gr.TabItem("Doc Preview"):
                     preview_box = gr.Markdown("Select a document to preview.")
-                with gr.TabItem("Proposed DocOps"):
-                    docops_preview = gr.JSON(label="Proposed Actions")
-                with gr.TabItem("Archive & Logs"):
-                    gr.Markdown("Archive and Logs viewing coming soon.")
+                with gr.TabItem("Proposal Payload"):
+                    proposal_payload_view = gr.JSON(label="Payload")
+                with gr.TabItem("Diff Viewer"):
+                    diff_view = gr.Markdown("No active patch proposal.")
 
     # Event Handlers
+    demo.load(lambda: get_current_state()[1], outputs=[proposal_status])
     refresh_btn.click(lambda f: gr.update(choices=get_documents_list(f)), inputs=[filter_dropdown], outputs=[doc_list])
     doc_list.select(load_document, inputs=[doc_list], outputs=[preview_box])
     
-    validate_btn.click(handle_docops, inputs=[proposal_input], outputs=[proposal_status, docops_preview])
-    apply_btn.click(apply_docops, inputs=[proposal_input], outputs=[proposal_status])
+    def on_submit(proposal_json):
+        status, payload = handle_proposal_submission(proposal_json)
+        diff_content = payload.get("diff_content", "No diff for this proposal.") if payload else ""
+        return status, payload, f"```diff\n{diff_content}\n```"
+
+    submit_proposal_btn.click(on_submit, inputs=[proposal_input], outputs=[proposal_status, proposal_payload_view, diff_view])
+    
+    approve_btn.click(lambda n: handle_approval("Approved", n), inputs=[note_input], outputs=[proposal_status])
+    reject_btn.click(lambda n: handle_approval("Rejected", n), inputs=[note_input], outputs=[proposal_status])
+    
+    execute_btn.click(apply_current_proposal, outputs=[proposal_status])
 
 if __name__ == "__main__":
     demo.launch()
